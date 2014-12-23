@@ -21,6 +21,8 @@ typedef struct
     uint8_t c[3];
 } color_t;
 
+uint8_t seed_set = 0;
+
 int32_t calibration;
 color_t last_col;
 
@@ -48,14 +50,20 @@ uint8_t is_touched(void)
 {
     int32_t n = charge_time(PB2);
 
+    if (!seed_set && n > calibration)
+    {
+        seed_set = 1;
+        srand(TCNT1);
+    }
+
     return n > calibration;
 }    
 
 void led_rgb(uint8_t red, uint8_t green, uint8_t blue)
 {
-    OCR1B = pgm_read_byte(&gamma[255 - blue]);
-    OCR0B = pgm_read_byte(&gamma[255 - green]);
-    OCR0A = pgm_read_byte(&gamma[255 - red]);
+    OCR1B = pgm_read_byte(&gamma_table[255 - blue]);
+    OCR0B = pgm_read_byte(&gamma_table[255 - green]);
+    OCR0A = pgm_read_byte(&gamma_table[255 - red]);
     last_col.c[0] = red;
     last_col.c[1] = green;
     last_col.c[2] = blue;
@@ -178,6 +186,23 @@ uint8_t rainbow(uint16_t dly)
     return 1;
 }
 
+uint8_t random_fade(uint16_t dly)
+{
+    uint8_t t = 0;
+    color_t c[2];
+
+    for(;;)
+    {
+        get_hue(t, &c[0]);
+        get_hue(t + 128, &c[1]);
+
+        if (!fade(c, 2, 255, 10, 0, 25))
+            return 1;
+
+        t += 10;
+    }
+}
+
 void setup(void)
 {
     // PB4 = OC1B = blue
@@ -238,8 +263,8 @@ void touch_feedback(void)
     delay(250);
 
     // a red flash for debugging. take out for shipping
-    led_rgb(255, 0, 0);
-    delay(100);
+//    led_rgb(255, 0, 0);
+//    delay(100);
         
     colors[0].c[0] = 255;
     colors[0].c[1] = 255;
@@ -247,7 +272,7 @@ void touch_feedback(void)
     colors[1].c[0] = 0;
     colors[1].c[1] = 0;
     colors[1].c[2] = 0;
-    fade(colors, 2, 255, 1, 1, 0);
+    fade(colors, 2, 128, 1, 1, 0);
 }
 
 int main(int argc, char *argv[])
@@ -262,23 +287,22 @@ int main(int argc, char *argv[])
         calibration += charge_time(PB2);
         _delay_ms(20);
     }
+    srand(TCNT1 * calibration);
     calibration = (calibration + 4) / 6;
-
-    for(;0;)
-        touch_feedback();
 
     for(;;)
     {
         switch(index)
         {
             case 0:
-                touched = fade(candy_ho, 4, 128, 50, 0, 50);
+                touched = random_fade(25);
+//                touched = fade(candy_ho, 4, 128, 50, 0, 50);
                 break;
             case 1:
                 touched = fade(citrus, 3, 128, 25, 0, 50);
                 break;
             case 2:
-                touched = fade(blue_throb, 2, 64, 1, 0, 0);
+                touched = random_fade(25);
                 break;
             case 3:
                 touched = rainbow(25);
