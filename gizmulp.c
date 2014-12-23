@@ -26,6 +26,12 @@ uint8_t seed_set = 0;
 int32_t calibration;
 color_t last_col;
 
+uint8_t g_speed = 25;
+const uint8_t min_speed = 64;
+const uint8_t max_speed = 10;
+const uint8_t speed_delta = 30;
+const uint8_t global_speed_mult = 8;
+
 uint8_t charge_time(uint8_t pin)
 {
     uint8_t mask = (1 << pin);
@@ -61,9 +67,15 @@ uint8_t is_touched(void)
 
 void led_rgb(uint8_t red, uint8_t green, uint8_t blue)
 {
+#ifdef USE_GAMMA
     OCR1B = pgm_read_byte(&gamma_table[255 - blue]);
     OCR0B = pgm_read_byte(&gamma_table[255 - green]);
     OCR0A = pgm_read_byte(&gamma_table[255 - red]);
+#else
+    OCR1B = 255 - blue;
+    OCR0B = 255 - green;
+    OCR0A = 255 - red;
+#endif
     last_col.c[0] = red;
     last_col.c[1] = green;
     last_col.c[2] = blue;
@@ -94,7 +106,7 @@ void delay(uint16_t dly)
         _delay_ms(1);
 }
 
-uint8_t fade(color_t *colors, uint8_t segments, uint16_t steps, uint16_t dly, uint8_t repeat, uint8_t hold)
+uint8_t fade(color_t *colors, uint8_t segments, uint16_t steps, uint8_t repeat, uint8_t hold)
 {
     uint8_t i, n;
     uint16_t j, r;
@@ -109,10 +121,10 @@ uint8_t fade(color_t *colors, uint8_t segments, uint16_t steps, uint16_t dly, ui
                 return 1;
 
             set_fade_color(&colors[i], &colors[n], steps, j);
-            delay(dly);
+            delay(g_speed);
         } 
         if (hold)
-            delay((uint16_t)dly * (uint16_t)hold);
+            delay((uint16_t)g_speed * (uint16_t)hold);
     }
     return 0;
 }
@@ -169,7 +181,7 @@ void get_hue(uint32_t t, color_t *c)
     c->c[2] += 3;
 }
 
-uint8_t rainbow(uint16_t dly)
+uint8_t rainbow(void)
 {
     uint8_t i;
     color_t c;
@@ -178,7 +190,7 @@ uint8_t rainbow(uint16_t dly)
     {
         get_hue(i, &c);
         led_color(&c);
-        delay(dly);
+        delay(g_speed);
 
         if (i == HUE_MAX)
             i = 0;
@@ -186,7 +198,7 @@ uint8_t rainbow(uint16_t dly)
     return 1;
 }
 
-uint8_t random_fade(uint16_t dly)
+uint8_t random_fade(void)
 {
     uint8_t t = 0;
     color_t c[2];
@@ -196,7 +208,7 @@ uint8_t random_fade(uint16_t dly)
         get_hue(t, &c[0]);
         get_hue(t + 128, &c[1]);
 
-        if (!fade(c, 2, 255, 10, 0, 25))
+        if (fade(c, 2, 255, 0, 25))
             return 1;
 
         t += 10;
@@ -230,7 +242,7 @@ void setup(void)
     sei();
 }
 
-#define NUM_PATTERNS 3
+#define NUM_PATTERNS 5
 color_t citrus[3] = { { 255, 128, 0 }, { 255, 255, 0 }, { 255, 00, 0 } };
 color_t test[6] = 
 { 
@@ -255,24 +267,55 @@ color_t red_throb[2] = { { 24, 0, 0}, { 40, 0, 0} };
 color_t candy_ho[4] = { { 255, 0, 255 }, { 75, 0, 138}, { 0, 0, 255}, { 75, 0, 138 } };
 color_t xmas[3] = { { 255, 0, 0}, { 0, 64, 0}, {255, 255, 255} };
 
+void speed_setting(void)
+{
+    uint8_t i, t = g_speed * global_speed_mult;
+
+    for(i = 0; i < 4; i++)
+    {
+        delay(250);
+        if (!is_touched())
+            return;
+    }
+    for(i = 0; is_touched(); i++)
+    {
+        led_rgb(0, 0, 255);
+        delay(t);
+        led_rgb(0, 0, 0);
+        delay(t);
+
+        if (i % 10 == 0)
+            t -= speed_delta;
+
+        if (t < max_speed)
+            t = min_speed;
+    }
+    g_speed = t / global_speed_mult;;
+}
+
 void touch_feedback(void)
 {
     color_t colors[2];
+    uint8_t saved;
 
     led_rgb(255, 255, 255);
     delay(250);
 
-    // a red flash for debugging. take out for shipping
-//    led_rgb(255, 0, 0);
-//    delay(100);
-        
+    if (is_touched())
+        speed_setting();
+
     colors[0].c[0] = 255;
     colors[0].c[1] = 255;
     colors[0].c[2] = 255;
     colors[1].c[0] = 0;
     colors[1].c[1] = 0;
     colors[1].c[2] = 0;
-    fade(colors, 2, 128, 1, 1, 0);
+
+    // hacky. :(
+    saved = g_speed;
+    g_speed = 1;
+    fade(colors, 2, 128, 1, 0);
+    g_speed = saved;
 }
 
 int main(int argc, char *argv[])
@@ -295,33 +338,24 @@ int main(int argc, char *argv[])
         switch(index)
         {
             case 0:
-                touched = random_fade(25);
-//                touched = fade(candy_ho, 4, 128, 50, 0, 50);
+//                touched = fade(test2, 6, 128, 0, 50);
+                touched = fade(candy_ho, 4, 128, 0, 50);
                 break;
             case 1:
-                touched = fade(citrus, 3, 128, 25, 0, 50);
+                touched = fade(citrus, 3, 128, 0, 50);
                 break;
             case 2:
-                touched = random_fade(25);
+                touched = random_fade();
                 break;
             case 3:
-                touched = rainbow(25);
+                touched = rainbow();
                 break;
             case 4:
-                touched = fade(xmas, 3, 128, 25, 0, 50);
+                touched = fade(xmas, 3, 128, 0, 50);
                 break;
         }
         if (touched)
             touch_feedback();
-        else
-        {
-            led_rgb(255, 0, 0);
-            delay(333);
-            led_rgb(0, 255, 0);
-            delay(333);
-            led_rgb(0, 0, 255);
-            delay(333);
-        }
 
         index = (index+1) % NUM_PATTERNS;
     }
