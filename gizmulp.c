@@ -86,7 +86,7 @@ void delay(uint16_t dly)
         _delay_ms(1);
 }
 
-uint8_t fade(color_t *colors, uint8_t segments, uint16_t steps, uint16_t dly, uint8_t repeat)
+uint8_t fade(color_t *colors, uint8_t segments, uint16_t steps, uint16_t dly, uint8_t repeat, uint8_t hold)
 {
     uint8_t i, n;
     uint16_t j, r;
@@ -103,6 +103,8 @@ uint8_t fade(color_t *colors, uint8_t segments, uint16_t steps, uint16_t dly, ui
             set_fade_color(&colors[i], &colors[n], steps, j);
             delay(dly);
         } 
+        if (hold)
+            delay((uint16_t)dly * (uint16_t)hold);
     }
     return 0;
 }
@@ -226,7 +228,7 @@ color_t test2[6] =
 color_t blue_throb[2] = { { 0, 0, 24}, { 0, 0, 40} };
 color_t red_throb[2] = { { 24, 0, 0}, { 40, 0, 0} };
 color_t candy_ho[4] = { { 255, 0, 255 }, { 75, 0, 138}, { 0, 0, 255}, { 75, 0, 138 } };
-color_t peer_out[2] = { { 75, 0, 138}, { 75, 0, 138} };
+color_t xmas[3] = { { 255, 0, 0}, { 0, 64, 0}, {255, 255, 255} };
 
 void touch_feedback(void)
 {
@@ -245,7 +247,7 @@ void touch_feedback(void)
     colors[1].c[0] = 0;
     colors[1].c[1] = 0;
     colors[1].c[2] = 0;
-    fade(colors, 2, 255, 1, 1);
+    fade(colors, 2, 255, 1, 1, 0);
 }
 
 int main(int argc, char *argv[])
@@ -270,17 +272,19 @@ int main(int argc, char *argv[])
         switch(index)
         {
             case 0:
-                //touched = fade(test2, 6, 128, 50, 0);
-                touched = fade(candy_ho, 4, 128, 50, 0);
+                touched = fade(candy_ho, 4, 128, 50, 0, 50);
                 break;
             case 1:
-                touched = fade(citrus, 3, 128, 25, 0);
+                touched = fade(citrus, 3, 128, 25, 0, 50);
                 break;
             case 2:
-                touched = fade(blue_throb, 2, 64, 1, 0);
+                touched = fade(blue_throb, 2, 64, 1, 0, 0);
                 break;
             case 3:
                 touched = rainbow(25);
+                break;
+            case 4:
+                touched = fade(xmas, 3, 128, 25, 0, 50);
                 break;
         }
         if (touched)
