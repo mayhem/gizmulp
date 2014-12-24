@@ -20,50 +20,29 @@ typedef struct
 {
     uint8_t c[3];
 } color_t;
+uint8_t is_touched(void);
 
 uint8_t seed_set = 0;
 
 int32_t calibration;
 color_t last_col;
 
-uint8_t g_speed = 25;
-const uint8_t min_speed = 64;
-const uint8_t max_speed = 10;
-const uint8_t speed_delta = 30;
-const uint8_t global_speed_mult = 8;
+volatile uint32_t g_time = 0;
+uint16_t g_speed = 0;
+uint8_t g_speed_index = 10;
+int32_t SPEED_MIN = 64;
+int32_t SPEED_MAX = 5;
+int32_t SPEED_STEPS = 20;
 
-uint8_t charge_time(uint8_t pin)
+int32_t SPEED_ADJUST_MIN = 20;
+int32_t SPEED_ADJUST_MAX = 5;
+int32_t SPEED_INCREMENT_BTH;
+int32_t SPEED_ADJUST_INCREMENT_BTH;
+
+ISR (TIMER0_OVF_vect)
 {
-    uint8_t mask = (1 << pin);
-    uint8_t i;
-
-    DDRB &= ~mask; 
-    PORTB |= mask; 
-
-    for (i = 0; i < 16; i++) 
-    {
-        if (PINB & mask) 
-            break;
-    }
-
-    PORTB &= ~mask; 
-    DDRB |= mask; 
-
-    return i;
+    g_time++;
 }
-
-uint8_t is_touched(void)
-{
-    int32_t n = charge_time(PB2);
-
-    if (!seed_set && n > calibration)
-    {
-        seed_set = 1;
-        srand(TCNT1);
-    }
-
-    return n > calibration;
-}    
 
 void led_rgb(uint8_t red, uint8_t green, uint8_t blue)
 {
@@ -236,9 +215,13 @@ void setup(void)
     TCNT0 = 0;
     TCNT1 = 0;
 
+    TIMSK |= (1<<TOIE0);
+
     // Setup PWM pins as output
     DDRB = (1 << PB0) | (1 << PB1) | (1 << PB4); // | (1 << PB3);
 
+    SPEED_INCREMENT_BTH = (SPEED_MIN - SPEED_MAX) * 1000 / SPEED_STEPS;
+    SPEED_ADJUST_INCREMENT_BTH = (SPEED_ADJUST_MIN - SPEED_ADJUST_MAX) * 1000 / SPEED_STEPS;
     sei();
 }
 
@@ -267,9 +250,15 @@ color_t red_throb[2] = { { 24, 0, 0}, { 40, 0, 0} };
 color_t candy_ho[4] = { { 255, 0, 255 }, { 75, 0, 138}, { 0, 0, 255}, { 75, 0, 138 } };
 color_t xmas[3] = { { 255, 0, 0}, { 0, 64, 0}, {255, 255, 255} };
 
+uint16_t get_speed(void)
+{
+    return SPEED_MAX + (SPEED_INCREMENT_BTH * g_speed_index / 1000);
+}
+
 void speed_setting(void)
 {
-    uint8_t i, t = g_speed * global_speed_mult;
+    uint8_t i, state = 0;
+    uint32_t t = 0;
 
     for(i = 0; i < 4; i++)
     {
@@ -279,18 +268,27 @@ void speed_setting(void)
     }
     for(i = 0; is_touched(); i++)
     {
-        led_rgb(0, 0, 255);
-        delay(t);
-        led_rgb(0, 0, 0);
-        delay(t);
-
+        if (t == 0 || g_time >= t)
+        {
+            if (state)
+                led_rgb(0, 0, 0);
+            else
+                led_rgb(0, 0, 255);
+            state = !state;
+            t = g_time + SPEED_ADJUST_MAX + (SPEED_ADJUST_INCREMENT_BTH * g_speed_index / 1000);
+        }
+        while(g_time < t)
+            ;
         if (i % 10 == 0)
-            t -= speed_delta;
-
-        if (t < max_speed)
-            t = min_speed;
+        {
+            g_speed_index--;
+            if (g_speed_index == 0)
+                g_speed_index = SPEED_STEPS;
+        }
     }
-    g_speed = t / global_speed_mult;;
+    g_speed = get_speed();
+    led_rgb(0,255,0);
+    delay(1000);
 }
 
 void touch_feedback(void)
@@ -318,12 +316,46 @@ void touch_feedback(void)
     g_speed = saved;
 }
 
+uint8_t charge_time(uint8_t pin)
+{
+    uint8_t mask = (1 << pin);
+    uint8_t i;
+
+    DDRB &= ~mask; 
+    PORTB |= mask; 
+
+    for (i = 0; i < 16; i++) 
+    {
+        if (PINB & mask) 
+            break;
+    }
+
+    PORTB &= ~mask; 
+    DDRB |= mask; 
+
+    return i;
+}
+
+uint8_t is_touched(void)
+{
+    int32_t n = charge_time(PB2);
+
+    if (!seed_set && n > calibration)
+    {
+        seed_set = 1;
+        srand(TCNT1);
+    }
+
+    return n > calibration;
+}    
+
 int main(int argc, char *argv[])
 {
     uint8_t i, index = 0, touched = 0;
 
     setup();
 
+    g_speed = get_speed();
     _delay_ms(100);
     for (i = 0; i < 8; i++) 
     {
