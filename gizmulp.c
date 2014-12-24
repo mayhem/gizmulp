@@ -31,7 +31,7 @@ volatile uint32_t g_time = 0;
 uint16_t g_speed = 0;
 uint8_t g_speed_index = 10;
 int32_t SPEED_MIN = 64;
-int32_t SPEED_MAX = 5;
+int32_t SPEED_MAX = 1;
 int32_t SPEED_STEPS = 20;
 
 int32_t SPEED_ADJUST_MIN = 20;
@@ -287,8 +287,6 @@ void speed_setting(void)
         }
     }
     g_speed = get_speed();
-    led_rgb(0,255,0);
-    delay(1000);
 }
 
 void touch_feedback(void)
@@ -312,7 +310,7 @@ void touch_feedback(void)
     // hacky. :(
     saved = g_speed;
     g_speed = 1;
-    fade(colors, 2, 128, 1, 0);
+    fade(colors, 2, 64, 1, 0);
     g_speed = saved;
 }
 
@@ -370,7 +368,6 @@ int main(int argc, char *argv[])
         switch(index)
         {
             case 0:
-//                touched = fade(test2, 6, 128, 0, 50);
                 touched = fade(candy_ho, 4, 128, 0, 50);
                 break;
             case 1:
